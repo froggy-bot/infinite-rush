@@ -39,15 +39,15 @@ const thrashinator = {
 };
 
 const trackCollections = {
-  "Pato":         { prefix: 1,  tracks: pato },
-  "Gunner":       { prefix: 2,  tracks: gunner },
-  "Gore":         { prefix: 3,  tracks: gore },
-  "Bread":        { prefix: 4,  tracks: bread },
-  "Swole":        { prefix: 5,  tracks: swole },
-  "TRD":          { prefix: 6,  tracks: trd },
-  "Swampee":      { prefix: 7,  tracks: swampee },
-  "Biyzor":       { prefix: 8,  tracks: biyzor },
-  "Fidestic":     { prefix: 9,  tracks: fidestic },
+  "Pato":         { prefix: 1,  tracks: pato         },
+  "Gunner":       { prefix: 2,  tracks: gunner       },
+  "Gore":         { prefix: 3,  tracks: gore         },
+  "Bread":        { prefix: 4,  tracks: bread        },
+  "Swole":        { prefix: 5,  tracks: swole        },
+  "TRD":          { prefix: 6,  tracks: trd          },
+  "Swampee":      { prefix: 7,  tracks: swampee      },
+  "Biyzor":       { prefix: 8,  tracks: biyzor       },
+  "Fidestic":     { prefix: 9,  tracks: fidestic     },
   "Thrashinator": { prefix: 10, tracks: thrashinator }
 };
 
@@ -319,7 +319,6 @@ const iconPool = [
   "froggy_car.png",
   "froggy_cheese.png",
   "froggy_cleopatra.png",
-  "froggy_errorscreen.png",
   "froggy_evil.png",
   "froggy_junkyard.png",
   "froggy_metalpipes.png",
