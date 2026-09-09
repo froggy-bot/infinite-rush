@@ -9,6 +9,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  deleteDoc,
   onSnapshot,
   runTransaction,
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
@@ -60,8 +61,11 @@ const voteMessage = document.getElementById("voteMessage");
 
 const resultTrackDisplay = document.getElementById("resultTrackDisplay");
 const likeBtn = document.getElementById("likeBtn");
+const likeIcon = document.getElementById("likeIcon");
 const favoriteBtn = document.getElementById("favoriteBtn");
+const favoriteIcon = document.getElementById("favoriteIcon");
 const anothaOneBtn = document.getElementById("anothaOneBtn");
+const ggsBtn = document.getElementById("ggsBtn");
 
 const tabButtons = document.querySelectorAll(".tab-btn");
 const tabPanels = document.querySelectorAll(".tab-panel");
@@ -580,20 +584,37 @@ function renderResultTrack(resultTrack) {
     <p class="result-track-creator">by ${resultTrack.creator}</p>
   `;
   likeBtn.classList.remove("active");
+  likeIcon.src = "froggy-like-unchecked.png";
   favoriteBtn.classList.remove("active");
+  favoriteIcon.src = "star-unchecked.png";
 }
 
 likeBtn.addEventListener("click", () => {
-  likeBtn.classList.toggle("active");
+  const isNowActive = likeBtn.classList.toggle("active");
+  likeIcon.src = isNowActive ? "froggy-like-checked.png" : "froggy-like-unchecked.png";
 });
 
 favoriteBtn.addEventListener("click", () => {
   const isNowActive = favoriteBtn.classList.toggle("active");
+  favoriteIcon.src = isNowActive ? "star-checked.png" : "star-unchecked.png";
   if (isNowActive) {
     spawnSparkles(favoriteBtn, 10);
     playFavorite();
   }
 });
+
+// "GGS" closes out the race entirely, back to the very first "Start Game"
+// screen — unlike "Anotha One", it does NOT queue up a new round.
+async function ggs() {
+  playEnd();
+  try {
+    await deleteDoc(gameRef);
+  } catch (error) {
+    console.error("Error closing out the race:", error);
+  }
+}
+
+ggsBtn.addEventListener("click", ggs);
 
 // ---------- Garage: random car with category filters ----------
 function getSelectedCategories() {

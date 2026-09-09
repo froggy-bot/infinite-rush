@@ -492,19 +492,35 @@ input[type="checkbox"].category-filter:checked::after,
   margin: 20px 0;
 }
 
+.result-footer-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+#resultsView h2 {
+  text-align: center;
+}
+
 .icon-action-btn {
   position: relative;
   overflow: visible;
-  padding: 14px;
-  background: var(--panel-light);
+  padding: 6px;
+  background: none;
+  border: none;
+  box-shadow: none;
 }
 
-.icon-action-btn svg rect {
-  fill: var(--text-dim);
+.icon-action-btn:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
 }
 
-.icon-action-btn.active svg rect {
-  fill: var(--gold);
+.icon-action-btn img {
+  width: 40px;
+  height: 40px;
+  image-rendering: pixelated;
+  display: block;
 }
 
 @keyframes legendary-text {
