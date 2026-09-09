@@ -80,7 +80,7 @@ button:active:not(:disabled) {
 
 button:disabled {
   opacity: 0.5;
-  cursor: not-allowed;
+  /* cursor: not-allowed; */
 }
 
 button.btn-secondary {
@@ -355,6 +355,11 @@ input[type="checkbox"].category-filter:checked::after,
 .secret-toggle.revealed,
 .secret-toggle.revealed input {
   cursor: url('cursor.png') 4 4, pointer;
+}
+
+#gambleBtn {
+  display: block;
+  margin: 20px auto 0; 
 }
 
 .car-result {
