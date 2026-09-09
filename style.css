@@ -314,7 +314,8 @@ h2 {
   cursor: url('cursor.png') 4 4, pointer;
 }
 
-input[type="checkbox"].category-filter {
+input[type="checkbox"].category-filter, 
+#unreleasedFilter {
   appearance: none;
   width: 22px;
   height: 22px;
@@ -325,15 +326,35 @@ input[type="checkbox"].category-filter {
   flex-shrink: 0;
 }
 
-input[type="checkbox"].category-filter:checked {
+input[type="checkbox"].category-filter:checked, 
+#unreleasedFilter:checked {
   background: var(--gold);
 }
 
-input[type="checkbox"].category-filter:checked::after {
+input[type="checkbox"].category-filter:checked::after, 
+#unreleasedFilter:checked::after {
   content: "";
   position: absolute;
   inset: 4px;
   background: var(--black);
+}
+
+.secret-toggle {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.secret-toggle input {
+  cursor: default;
+}
+
+.secret-toggle.revealed {
+  opacity: 1;
+}
+
+.secret-toggle.revealed,
+.secret-toggle.revealed input {
+  cursor: url('cursor.png') 4 4, pointer;
 }
 
 .car-result {

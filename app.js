@@ -61,6 +61,8 @@ const tabButtons = document.querySelectorAll(".tab-btn");
 const tabPanels = document.querySelectorAll(".tab-panel");
 
 const categoryCheckboxes = document.querySelectorAll(".category-filter");
+const unreleasedFilter = document.getElementById("unreleasedFilter");
+const secretToggleLabel = document.getElementById("secretToggleLabel");
 const gambleBtn = document.getElementById("gambleBtn");
 const carResult = document.getElementById("carResult");
 
@@ -479,6 +481,14 @@ function updateGambleButtonState() {
 categoryCheckboxes.forEach((cb) => cb.addEventListener("change", updateGambleButtonState));
 updateGambleButtonState();
 
+unreleasedFilter.addEventListener("change", (event) => {
+  if (event.target.checked) {
+    secretToggleLabel.classList.add("revealed");
+  } else {
+    secretToggleLabel.classList.remove("revealed");
+  }
+});
+
 function spawnSparkles(container, count) {
   const colors = ["var(--gold)", "var(--pink)", "var(--cyan)"];
 
@@ -496,7 +506,13 @@ function spawnSparkles(container, count) {
 
 function spinForCar() {
   const categories = getSelectedCategories();
-  const pool = carPool.filter((car) => categories.includes(car.category));
+  const includeUnreleased = unreleasedFilter.checked;
+  
+  const pool = carPool.filter((car) => {
+    const matchesCategory = categories.includes(car.category);
+    const matchesReleaseStatus = includeUnreleased ? true : car.released === true;
+    return matchesCategory && matchesReleaseStatus;
+  });
 
   if (pool.length === 0) {
     carResult.innerHTML = "<p>No cars match those categories.</p>";
