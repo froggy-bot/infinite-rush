@@ -9,10 +9,8 @@ import {
   doc,
   getDoc,
   setDoc,
-  deleteDoc,
   onSnapshot,
   runTransaction,
-  arrayUnion,
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
 // --- Firebase config (Froggy Bot project) ---
@@ -51,11 +49,19 @@ const nameSaveBtn = document.getElementById("nameSaveBtn");
 const nameCancelBtn = document.getElementById("nameCancelBtn");
 
 const idleView = document.getElementById("idleView");
-const activeView = document.getElementById("activeView");
+const votingView = document.getElementById("votingView");
+const resultsView = document.getElementById("resultsView");
 const startGameBtn = document.getElementById("startGameBtn");
 const sendItBtn = document.getElementById("sendItBtn");
+const sendItProgress = sendItBtn.querySelector(".send-it-progress");
+const sendItLabel = sendItBtn.querySelector(".btn-label");
 const tracksContainer = document.getElementById("tracksContainer");
 const voteMessage = document.getElementById("voteMessage");
+
+const resultTrackDisplay = document.getElementById("resultTrackDisplay");
+const likeBtn = document.getElementById("likeBtn");
+const favoriteBtn = document.getElementById("favoriteBtn");
+const anothaOneBtn = document.getElementById("anothaOneBtn");
 
 const tabButtons = document.querySelectorAll(".tab-btn");
 const tabPanels = document.querySelectorAll(".tab-panel");
@@ -154,6 +160,11 @@ function playLegendary() {
   const notes = [523, 659, 784, 1047, 1319];
   notes.forEach((freq, i) => beep(freq, i * 0.09, 0.16, "square", 0.16));
   beep(1568, notes.length * 0.09, 0.35, "triangle", 0.12);
+}
+
+function playFavorite() {
+  beep(880, 0, 0.06, "square", 0.14);
+  beep(1318, 0.05, 0.1, "square", 0.14);
 }
 
 volumeBtn.classList.toggle("muted", isMuted);
@@ -309,7 +320,13 @@ tabButtons.forEach((btn) => {
   });
 });
 
-// ---------- Game round lifecycle (idle <-> active) ----------
+// ---------- Game round lifecycle (idle <-> voting <-> results) ----------
+let activeGameStartedAt = null;
+let lastShownResultTrackId = null;
+let sendItTimerInterval = null;
+
+const SEND_IT_WAIT_MS = 10000;
+
 function listenToGame() {
   onSnapshot(
     gameRef,
@@ -320,9 +337,11 @@ function listenToGame() {
       }
 
       const data = snap.data();
-      const votedUsers = data.votedUsers || [];
-      const alreadyVoted = currentUid ? votedUsers.includes(currentUid) : false;
-      showActiveView(data.tracks || {}, alreadyVoted);
+      if (data.resultTrack) {
+        showResultsView(data.resultTrack);
+      } else {
+        showVotingView(data);
+      }
     },
     (error) => {
       console.error("Error listening to the current game:", error);
@@ -332,13 +351,68 @@ function listenToGame() {
 
 function showIdleView() {
   idleView.classList.remove("hidden");
-  activeView.classList.add("hidden");
+  votingView.classList.add("hidden");
+  resultsView.classList.add("hidden");
+  stopSendItTimer();
+  activeGameStartedAt = null;
+  lastShownResultTrackId = null;
 }
 
-function showActiveView(tracks, alreadyVoted) {
+function showVotingView(data) {
   idleView.classList.add("hidden");
-  activeView.classList.remove("hidden");
-  renderTracks(tracks, alreadyVoted);
+  votingView.classList.remove("hidden");
+  resultsView.classList.add("hidden");
+
+  const votesByUser = data.votesByUser || {};
+  renderTracks(data.tracks || {}, votesByUser);
+
+  if (data.startedAt !== activeGameStartedAt) {
+    activeGameStartedAt = data.startedAt;
+    startSendItTimer(data.startedAt);
+  }
+}
+
+function showResultsView(resultTrack) {
+  idleView.classList.add("hidden");
+  votingView.classList.add("hidden");
+  resultsView.classList.remove("hidden");
+  stopSendItTimer();
+
+  if (resultTrack.trackId !== lastShownResultTrackId) {
+    lastShownResultTrackId = resultTrack.trackId;
+    renderResultTrack(resultTrack);
+  }
+}
+
+// ---------- "Send It" 10s timer, shown as a bar draining on the button ----------
+function stopSendItTimer() {
+  if (sendItTimerInterval) {
+    clearInterval(sendItTimerInterval);
+    sendItTimerInterval = null;
+  }
+}
+
+function updateSendItProgress(startedAt) {
+  const elapsed = Date.now() - (startedAt || 0);
+  const remaining = Math.max(0, SEND_IT_WAIT_MS - elapsed);
+  const remainingPct = (remaining / SEND_IT_WAIT_MS) * 100;
+
+  sendItProgress.style.width = `${remainingPct}%`;
+
+  if (remaining <= 0) {
+    sendItBtn.disabled = false;
+    sendItLabel.textContent = "SEND IT";
+    stopSendItTimer();
+  } else {
+    sendItBtn.disabled = true;
+    sendItLabel.textContent = `SEND IT (${Math.ceil(remaining / 1000)}s)`;
+  }
+}
+
+function startSendItTimer(startedAt) {
+  stopSendItTimer();
+  updateSendItProgress(startedAt);
+  sendItTimerInterval = setInterval(() => updateSendItProgress(startedAt), 100);
 }
 
 function pickRandomTracks(amount = 5) {
@@ -356,6 +430,7 @@ function pickRandomTracks(amount = 5) {
 
 async function startGame() {
   startGameBtn.disabled = true;
+  anothaOneBtn.disabled = true;
   playStart();
   try {
     const chosen = pickRandomTracks(5);
@@ -366,41 +441,67 @@ async function startGame() {
 
     await setDoc(gameRef, {
       tracks: tracksData,
-      votedUsers: [],
+      votesByUser: {},
+      startedAt: Date.now(),
     });
   } catch (error) {
     console.error("Error starting game:", error);
   } finally {
     startGameBtn.disabled = false;
+    anothaOneBtn.disabled = false;
   }
 }
 
 startGameBtn.addEventListener("click", startGame);
+anothaOneBtn.addEventListener("click", startGame);
 
+// Picks the winning track (ties broken randomly) and moves the round into
+// the results phase. Guarded so it's safe even if two players click at
+// the same moment — whichever transaction runs first decides the winner,
+// the other becomes a no-op.
 async function sendIt() {
-  sendItBtn.disabled = true;
   playEnd();
   try {
-    await deleteDoc(gameRef);
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(gameRef);
+      if (!snap.exists()) return;
+
+      const data = snap.data();
+      if (data.resultTrack) return;
+
+      const entries = Object.entries(data.tracks || {});
+      if (entries.length === 0) return;
+
+      const maxVotes = Math.max(...entries.map(([, track]) => track.votes || 0));
+      const tied = entries.filter(([, track]) => (track.votes || 0) === maxVotes);
+      const [winnerId, winnerTrack] = tied[Math.floor(Math.random() * tied.length)];
+
+      transaction.update(gameRef, {
+        resultTrack: {
+          trackId: winnerId,
+          name: winnerTrack.name,
+          creator: winnerTrack.creator,
+        },
+      });
+    });
   } catch (error) {
     console.error("Error sending it:", error);
-  } finally {
-    sendItBtn.disabled = false;
   }
 }
 
 sendItBtn.addEventListener("click", sendIt);
 
-// ---------- Track voting ----------
-function renderTracks(tracksObj, alreadyVoted) {
+// ---------- Track voting (freely changeable until "Send It") ----------
+function renderTracks(tracksObj, votesByUser) {
   tracksContainer.innerHTML = "";
+  const myTrackId = currentUid ? votesByUser[currentUid] : undefined;
 
   Object.entries(tracksObj).forEach(([trackId, info]) => {
     const card = document.createElement("button");
     card.type = "button";
     card.className = "track-card";
     card.dataset.sound = "custom";
-    card.disabled = alreadyVoted;
+    if (trackId === myTrackId) card.classList.add("selected");
 
     const voters = info.voters || [];
     const votersHtml = voters
@@ -418,19 +519,17 @@ function renderTracks(tracksObj, alreadyVoted) {
       </div>
     `;
 
-    card.addEventListener("click", () => voteForTrack(trackId, card));
+    card.addEventListener("click", () => voteForTrack(trackId));
     tracksContainer.appendChild(card);
   });
 
-  voteMessage.textContent = alreadyVoted ? "Your vote is in!" : "";
+  voteMessage.textContent = myTrackId ? "Your vote is in!" : "";
 }
 
-async function voteForTrack(trackId, cardElement) {
+async function voteForTrack(trackId) {
   if (!currentUid) return;
 
   playVote();
-  tracksContainer.querySelectorAll(".track-card").forEach((c) => (c.disabled = true));
-  cardElement.classList.add("voting");
 
   try {
     await runTransaction(db, async (transaction) => {
@@ -438,34 +537,63 @@ async function voteForTrack(trackId, cardElement) {
       if (!snap.exists()) throw new Error("NO_GAME");
 
       const data = snap.data();
-      const votedUsers = data.votedUsers || [];
-      if (votedUsers.includes(currentUid)) throw new Error("ALREADY_VOTED");
+      const votesByUser = data.votesByUser || {};
+      const previousTrackId = votesByUser[currentUid];
 
-      const track = data.tracks ? data.tracks[trackId] : null;
-      if (!track) throw new Error("NO_TRACK");
+      if (previousTrackId === trackId) return; // already your pick, nothing to do
 
-      const updatedVoters = [
-        ...(track.voters || []),
-        { uid: currentUid, icon: currentIcon, name: currentName },
-      ];
+      const tracks = data.tracks || {};
+      const newTrack = tracks[trackId];
+      if (!newTrack) throw new Error("NO_TRACK");
 
-      transaction.update(gameRef, {
-        [`tracks.${trackId}.votes`]: (track.votes || 0) + 1,
-        [`tracks.${trackId}.voters`]: updatedVoters,
-        votedUsers: arrayUnion(currentUid),
-      });
+      const updates = {
+        [`votesByUser.${currentUid}`]: trackId,
+        [`tracks.${trackId}.votes`]: (newTrack.votes || 0) + 1,
+        [`tracks.${trackId}.voters`]: [
+          ...(newTrack.voters || []),
+          { uid: currentUid, icon: currentIcon, name: currentName },
+        ],
+      };
+
+      const previousTrack = previousTrackId ? tracks[previousTrackId] : null;
+      if (previousTrack) {
+        updates[`tracks.${previousTrackId}.votes`] = Math.max(0, (previousTrack.votes || 0) - 1);
+        updates[`tracks.${previousTrackId}.voters`] = (previousTrack.voters || []).filter(
+          (v) => v.uid !== currentUid
+        );
+      }
+
+      transaction.update(gameRef, updates);
     });
+    // No manual re-render needed: onSnapshot pushes the update to everyone,
+    // including this tab.
   } catch (error) {
-    if (error.message === "ALREADY_VOTED") {
-      voteMessage.textContent = "You already voted in this round.";
-    } else {
-      console.error("Error voting:", error);
-      voteMessage.textContent = "Something went wrong. Try again.";
-      tracksContainer.querySelectorAll(".track-card").forEach((c) => (c.disabled = false));
-    }
-    cardElement.classList.remove("voting");
+    console.error("Error voting:", error);
+    voteMessage.textContent = "Something went wrong. Try again.";
   }
 }
+
+// ---------- Results view: winning track + like/favorite (visual only for now) ----------
+function renderResultTrack(resultTrack) {
+  resultTrackDisplay.innerHTML = `
+    <p class="result-track-name">${resultTrack.name}</p>
+    <p class="result-track-creator">by ${resultTrack.creator}</p>
+  `;
+  likeBtn.classList.remove("active");
+  favoriteBtn.classList.remove("active");
+}
+
+likeBtn.addEventListener("click", () => {
+  likeBtn.classList.toggle("active");
+});
+
+favoriteBtn.addEventListener("click", () => {
+  const isNowActive = favoriteBtn.classList.toggle("active");
+  if (isNowActive) {
+    spawnSparkles(favoriteBtn, 10);
+    playFavorite();
+  }
+});
 
 // ---------- Garage: random car with category filters ----------
 function getSelectedCategories() {

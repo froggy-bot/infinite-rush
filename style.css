@@ -239,8 +239,43 @@ h2 {
   border-color: var(--cyan);
 }
 
-.track-card.voting {
+.track-card.selected {
   border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.send-it-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+#sendItBtn {
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.send-it-progress {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 0%;
+  background: rgba(10, 10, 10, 0.6);
+  z-index: 0;
+  transition: width 0.1s linear;
+}
+
+.btn-label {
+  position: relative;
+  z-index: 1;
+}
+
+.send-it-row .vote-message {
+  margin: 0;
+  text-align: left;
 }
 
 .track-name {
@@ -429,6 +464,47 @@ input[type="checkbox"].category-filter:checked::after,
   font-family: var(--font-display);
   font-size: 11px;
   animation: legendary-text 0.5s steps(2) infinite;
+}
+
+/* ---------- Results view (winning track) ---------- */
+
+.result-track-display {
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.result-track-name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  margin: 0 0 10px;
+}
+
+.result-track-creator {
+  font-size: 18px;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.result-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin: 20px 0;
+}
+
+.icon-action-btn {
+  position: relative;
+  overflow: visible;
+  padding: 14px;
+  background: var(--panel-light);
+}
+
+.icon-action-btn svg rect {
+  fill: var(--text-dim);
+}
+
+.icon-action-btn.active svg rect {
+  fill: var(--gold);
 }
 
 @keyframes legendary-text {

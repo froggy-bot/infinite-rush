@@ -92,11 +92,40 @@
         <button id="startGameBtn" data-sound="custom">START GAME</button>
       </div>
 
-      <div id="activeView" class="panel active-view hidden">
+      <div id="votingView" class="panel active-view hidden">
         <h2>VOTE FOR A TRACK</h2>
         <div id="tracksContainer" class="tracks-container"></div>
-        <p id="voteMessage" class="vote-message"></p>
-        <button id="sendItBtn" class="btn-secondary" data-sound="custom">SEND IT</button>
+        <div class="send-it-row">
+          <button id="sendItBtn" class="btn-secondary" data-sound="custom">
+            <span class="send-it-progress"></span>
+            <span class="btn-label">SEND IT</span>
+          </button>
+          <p id="voteMessage" class="vote-message"></p>
+        </div>
+      </div>
+
+      <div id="resultsView" class="panel active-view hidden">
+        <h2>NOW RACING</h2>
+        <div id="resultTrackDisplay" class="result-track-display"></div>
+        <div class="result-actions">
+          <button id="likeBtn" class="icon-action-btn" aria-label="Like" title="Like">
+            <svg viewBox="0 0 10 10" width="26" height="26" shape-rendering="crispEdges">
+              <rect x="3" y="0" width="3" height="4"></rect>
+              <rect x="0" y="4" width="9" height="6"></rect>
+            </svg>
+          </button>
+          <button id="favoriteBtn" class="icon-action-btn" aria-label="Favorite" title="Favorite" data-sound="custom">
+            <svg viewBox="0 0 10 10" width="26" height="26" shape-rendering="crispEdges">
+              <rect x="4" y="0" width="2" height="10"></rect>
+              <rect x="0" y="4" width="10" height="2"></rect>
+              <rect x="1" y="1" width="2" height="2"></rect>
+              <rect x="7" y="1" width="2" height="2"></rect>
+              <rect x="1" y="7" width="2" height="2"></rect>
+              <rect x="7" y="7" width="2" height="2"></rect>
+            </svg>
+          </button>
+        </div>
+        <button id="anothaOneBtn" class="btn-gold" data-sound="custom">ANOTHA ONE</button>
       </div>
 
     </section>
