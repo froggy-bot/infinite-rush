@@ -1,3 +1,69 @@
+const pato = {
+  1: "Dude the 3nd"
+};
+
+const gunner = {
+  1: "It's Payweek"
+};
+
+const gore = {
+  1: "King of the Hill"
+};
+
+const bread = {
+  1: "Gluten Freeway"
+};
+
+const swole = {
+  1: "SG Many Teeth"
+};
+
+const trd = {
+  1: "HW 36 Set"
+};
+
+const swampee = {
+  1: "S- Nostalgia 02"
+};
+
+const biyzor = {
+  1: "Biy Biy Bikes"
+};
+
+const fidestic = {
+  1: "Orthodox Sigma"
+};
+
+const thrashinator = {
+  1: "Mickey"
+};
+
+const trackCollections = {
+  "Pato":         { prefix: 1,  tracks: pato },
+  "Gunner":       { prefix: 2,  tracks: gunner },
+  "Gore":         { prefix: 3,  tracks: gore },
+  "Bread":        { prefix: 4,  tracks: bread },
+  "Swole":        { prefix: 5,  tracks: swole },
+  "TRD":          { prefix: 6,  tracks: trd },
+  "Swampee":      { prefix: 7,  tracks: swampee },
+  "Biyzor":       { prefix: 8,  tracks: biyzor },
+  "Fidestic":     { prefix: 9,  tracks: fidestic },
+  "Thrashinator": { prefix: 10, tracks: thrashinator }
+};
+
+const trackPool = Object.entries(trackCollections).flatMap(([creator, data]) => 
+  Object.entries(data.tracks).map(([localId, name]) => {
+    // Pad the local ID with zeros to prevent collisions (e.g., 1 becomes "001")
+    const paddedTrackId = localId.toString().padStart(3, '0');
+    const finalId = Number(`${data.prefix}${paddedTrackId}`);
+    return {
+      id: finalId,
+      name: name,
+      creator: creator
+    };
+  })
+);
+
 const carPool = [
   { id: 1  , name: "16 Angels"                      , category: "versatile"  , released: true  },
   { id: 2  , name: "16 Angels STH"                  , category: "versatile"  , released: true  },
@@ -244,19 +310,6 @@ const carPool = [
   { id: 243, name: "West Coast Flyer"               , category: "titan"      , released: false },
   { id: 244, name: "What-4-2"                       , category: "versatile"  , released: false },
   { id: 245, name: "Winning Formula"                , category: "speeder"    , released: true  }
-];
-
-const trackPool = [
-  { id: 1,   name: "Dude the 3nd",                  creator: "Pato"                        },
-  { id: 2,   name: "It's Payweek",                  creator: "Gunner"                      },
-  { id: 3,   name: "King of the Hill",              creator: "Gore"                        },
-  { id: 4,   name: "Gluten Freeway",                creator: "Bread"                       },
-  { id: 5,   name: "SG Many Teeth",                 creator: "Swole"                       },
-  { id: 6,   name: "HW 36 Set",                     creator: "TRD"                         },
-  { id: 7,   name: "S- Nostalgia 02",               creator: "Swampee"                     },
-  { id: 8,   name: "Biy Biy Bikes",                 creator: "Biyzor"                      },
-  { id: 9,   name: "Orthodox Sigma",                creator: "Fidestic"                    },
-  { id: 10,  name: "Mickey",                        creator: "Thrashinator"                },
 ];
 
 const iconPool = [
