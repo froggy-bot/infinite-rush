@@ -513,7 +513,10 @@ function spinForCar() {
 
   const spinInterval = setInterval(() => {
     const randomCar = pool[Math.floor(Math.random() * pool.length)];
-    carResult.innerHTML = `<p class="car-name">${randomCar.name}</p>`;
+    carResult.innerHTML = `
+      <p class="car-name">${randomCar.name}</p>
+      <p class="car-category">${randomCar.category.toUpperCase()}</p>
+    `;
     playSpinTick();
 
     if (Date.now() - startedAt >= spinDurationMs) {
