@@ -19,7 +19,7 @@
   box-sizing: border-box;
 }
 
-body {
+html, body {
   background-color: var(--bg);
   background-image: repeating-linear-gradient(
     to bottom,
@@ -35,7 +35,7 @@ body {
   max-width: 640px;
   margin: 0 auto;
   padding: 20px 16px 64px;
-  cursor: url('cursor.png') 2 2, auto;
+  cursor: url('cursor.png') 4 4, auto;
 }
 
 h1, h2 {
@@ -64,7 +64,7 @@ button {
   border: 3px solid var(--border);
   box-shadow: 4px 4px 0 var(--black);
   padding: 12px 16px;
-  cursor: url('cursor.png') 2 2, pointer;
+  cursor: url('cursor.png') 4 4, pointer;
   border-radius: 0;
   transition: transform 0.05s linear;
 }
@@ -311,7 +311,7 @@ h2 {
   align-items: center;
   gap: 8px;
   font-size: 18px;
-  cursor: url('cursor.png') 2 2, pointer;
+  cursor: url('cursor.png') 4 4, pointer;
 }
 
 input[type="checkbox"].category-filter {
@@ -321,7 +321,7 @@ input[type="checkbox"].category-filter {
   background: var(--panel-light);
   border: 3px solid var(--border);
   position: relative;
-  cursor: url('cursor.png') 2 2, pointer;
+  cursor: url('cursor.png') 4 4, pointer;
   flex-shrink: 0;
 }
 
