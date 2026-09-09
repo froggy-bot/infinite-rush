@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Froggy Bot</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
+
+  <link rel="icon" type="image/png" href="froggy-favicon.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Profile modal: name + icon. Shown on first visit, and again when
+       editing your profile via the badge in the header. -->
+  <div id="nameModalOverlay" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h2 id="nameModalTitle">SET UP YOUR PROFILE</h2>
+
+      <label class="field-label" for="nameInput">NAME</label>
+      <input type="text" id="nameInput" maxlength="20" placeholder="Enter your name" />
+
+      <label class="field-label">ICON</label>
+      <div id="iconGrid" class="icon-grid"></div>
+
+      <p id="profileHint" class="vote-message"></p>
+
+      <div class="modal-actions">
+        <button id="nameSaveBtn">SAVE</button>
+        <button id="nameCancelBtn" class="btn-secondary hidden">CANCEL</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Theme customizer modal -->
+  <div id="themeModalOverlay" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h2>CUSTOMIZE COLORS</h2>
+      <div id="themeFieldsContainer" class="preset-grid"></div>
+      <div class="modal-actions">
+        <button id="themeResetBtn" class="btn-secondary">RESET</button>
+        <button id="themeCloseBtn">CLOSE</button>
+      </div>
+    </div>
+  </div>
+
+  <header>
+    <div class="header-top">
+      <h1>FROGGY BOT <img src="froggy-pixel.png" alt="Froggy Bot mascot" class="mascot-icon" /></h1>
+      <div class="header-actions">
+        <button id="paletteBtn" class="icon-btn" aria-label="Customize colors" title="Customize colors">
+          <svg viewBox="0 0 10 10" width="22" height="22" shape-rendering="crispEdges">
+            <rect x="0" y="0" width="10" height="10" fill="var(--panel-light)" stroke="var(--border)" stroke-width="1"></rect>
+            <rect x="2" y="2" width="2" height="2" fill="var(--pink)"></rect>
+            <rect x="6" y="2" width="2" height="2" fill="var(--cyan)"></rect>
+            <rect x="2" y="6" width="2" height="2" fill="var(--gold)"></rect>
+            <rect x="6" y="6" width="2" height="2" fill="var(--text)"></rect>
+          </svg>
+        </button>
+        <button id="volumeBtn" class="icon-btn" aria-label="Toggle sound" title="Toggle sound" data-sound="custom">
+          <svg viewBox="0 0 10 10" width="22" height="22" shape-rendering="crispEdges">
+            <rect x="1" y="6" width="2" height="3" fill="var(--cyan)"></rect>
+            <rect x="4" y="4" width="2" height="5" fill="var(--cyan)"></rect>
+            <rect x="7" y="2" width="2" height="7" fill="var(--cyan)"></rect>
+            <rect class="mute-slash" x="-1" y="4" width="12" height="2" fill="var(--pink)" transform="rotate(45 5 5)"></rect>
+          </svg>
+        </button>
+        <button id="userBadge" class="user-badge">
+          <img id="userBadgeIcon" class="user-badge-icon hidden" alt="" />
+          <span id="userBadgeName">PLAYER</span>
+        </button>
+      </div>
+    </div>
+    <p class="subtitle"></p>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="vote">VOTE</button>
+    <button class="tab-btn" data-tab="garage">GARAGE</button>
+  </nav>
+
+  <main>
+
+    <!-- VOTE TAB -->
+    <section id="tab-vote" class="tab-panel">
+
+      <div id="idleView" class="panel idle-view">
+        <p>No race set up yet.</p>
+        <button id="startGameBtn" data-sound="custom">START GAME</button>
+      </div>
+
+      <div id="activeView" class="panel active-view hidden">
+        <h2>VOTE FOR A TRACK</h2>
+        <div id="tracksContainer" class="tracks-container"></div>
+        <p id="voteMessage" class="vote-message"></p>
+        <button id="sendItBtn" class="btn-secondary" data-sound="custom">SEND IT</button>
+      </div>
+
+    </section>
+
+    <!-- GARAGE TAB -->
+    <section id="tab-garage" class="tab-panel hidden">
+      <div class="panel">
+        <h2>ROLL FOR A CAR</h2>
+
+        <div class="filters">
+          <label class="checkbox-label">
+            <input type="checkbox" class="category-filter" value="titan" checked />
+            TITAN
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" class="category-filter" value="versatile" checked />
+            VERSATILE
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" class="category-filter" value="speeder" checked />
+            SPEEDER
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" class="category-filter" value="drifter" checked />
+            DRIFTER
+          </label>
+        </div>
+
+        <button id="gambleBtn" class="btn-gold" data-sound="custom">LET'S GO GAMBLING</button>
+
+        <div id="carResult" class="car-result">
+          <p>Pick your categories and spin.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- data.js loads first (classic script) so carPool/trackPool/iconPool are
+       global before app.js (a module, for the Firebase imports) runs. -->
+  <script src="data.js"></script>
+  <script type="module" src="app.js"></script>
+
+</body>
+</html>
