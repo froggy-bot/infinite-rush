@@ -1,7 +1,7 @@
 {
     "icons": [
         {
-            "src": "android-froggy.png",
+            "src": "./android-froggy.png",
             "sizes": "192x192",
             "type": "image/png"
         }
