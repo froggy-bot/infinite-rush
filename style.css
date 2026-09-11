@@ -13,6 +13,8 @@
 
   --font-display: 'Press Start 2P', monospace;
   --font-body: 'VT323', monospace;
+
+  --track-card-height: 78px;
 }
 
 * {
@@ -227,6 +229,7 @@ h2 {
   justify-content: space-between;
   align-items: center;
   width: 100%;
+  min-height: var(--track-card-height);
   font-family: var(--font-body);
   background: var(--panel-light);
   color: var(--text);
@@ -242,6 +245,24 @@ h2 {
 .track-card.selected {
   border-color: var(--gold);
   box-shadow: 0 0 0 2px var(--gold);
+}
+
+.track-card.rolling {
+  animation: pixel-pulse 0.18s steps(2) infinite;
+}
+
+.track-card.winner {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.track-card.dimmed {
+  opacity: 0.4;
+}
+
+.track-right.winner-actions {
+  gap: 10px;
+  align-items: flex-end;
 }
 
 .send-it-row {
@@ -281,17 +302,22 @@ h2 {
 .track-name {
   display: block;
   font-size: 22px;
+  line-height: 1.2;
+  margin: 0;
 }
 
 .track-creator {
   display: block;
   font-size: 16px;
+  line-height: 1.2;
+  margin: 0;
   color: var(--text-dim);
 }
 
 .track-card > .track-info {
   display: flex;
   flex-direction: column;
+  gap: 0;
 }
 
 .track-votes {
@@ -330,6 +356,55 @@ h2 {
   color: var(--gold);
   min-height: 1.4em;
   font-size: 18px;
+}
+
+/* ---------- Players tab ---------- */
+
+.players-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.players-container > p {
+  color: var(--text-dim);
+}
+
+.player-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel-light);
+  border: 3px solid var(--border);
+  padding: 10px 14px;
+  min-height: var(--track-card-height);
+}
+
+.player-icon {
+  width: 36px;
+  height: 36px;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+}
+
+.player-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.player-name {
+  font-size: 22px;
+}
+
+.player-car {
+  font-size: 16px;
+  color: var(--cyan);
+}
+
+.player-car.none {
+  color: var(--text-dim);
 }
 
 /* ---------- Garage ---------- */
@@ -468,38 +543,11 @@ input[type="checkbox"].category-filter:checked::after,
 
 /* ---------- Results view (winning track) ---------- */
 
-.result-track-display {
-  text-align: center;
-  margin-bottom: 4px;
-}
-
-.result-track-name {
-  font-family: var(--font-display);
-  font-size: 16px;
-  margin: 0 0 10px;
-}
-
-.result-track-creator {
-  font-size: 18px;
-  color: var(--text-dim);
-  margin: 0;
-}
-
-.result-actions {
-  display: flex;
-  gap: 16px;
-  justify-content: center;
-  margin: 20px 0;
-}
-
 .result-footer-actions {
   display: flex;
   gap: 12px;
   justify-content: center;
-}
-
-#resultsView h2 {
-  text-align: center;
+  margin-top: 12px;
 }
 
 .icon-action-btn {
@@ -517,10 +565,18 @@ input[type="checkbox"].category-filter:checked::after,
 }
 
 .icon-action-btn img {
-  width: 40px;
-  height: 40px;
   image-rendering: pixelated;
   display: block;
+}
+
+.icon-action-btn [data-role="like-icon"] {
+  width: 36px;
+  height: 32px;
+}
+
+.icon-action-btn [data-role="favorite-icon"] {
+  width: 38px;
+  height: 38px;
 }
 
 @keyframes legendary-text {

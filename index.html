@@ -80,6 +80,7 @@
   <nav class="tabs">
     <button class="tab-btn active" data-tab="vote">VOTE</button>
     <button class="tab-btn" data-tab="garage">GARAGE</button>
+    <button class="tab-btn" data-tab="players">PLAYERS</button>
   </nav>
 
   <main>
@@ -93,30 +94,17 @@
       </div>
 
       <div id="votingView" class="panel active-view hidden">
-        <h2>VOTE FOR A TRACK</h2>
+        <h2 id="votingHeading">VOTE FOR A TRACK</h2>
         <div id="tracksContainer" class="tracks-container"></div>
-        <div class="send-it-row">
+        <div id="sendItRow" class="send-it-row">
           <button id="sendItBtn" class="btn-secondary" data-sound="custom">
             <span class="send-it-progress"></span>
             <span class="btn-label">SEND IT</span>
           </button>
           <p id="voteMessage" class="vote-message"></p>
         </div>
-      </div>
-
-      <div id="resultsView" class="panel active-view hidden">
-        <h2>NOW RACING</h2>
-        <div id="resultTrackDisplay" class="result-track-display"></div>
-        <div class="result-actions">
-          <button id="likeBtn" class="icon-action-btn" aria-label="Like" title="Like">
-            <img id="likeIcon" src="froggy-like-unchecked.png" alt="" />
-          </button>
-          <button id="favoriteBtn" class="icon-action-btn" aria-label="Favorite" title="Favorite" data-sound="custom">
-            <img id="favoriteIcon" src="star-unchecked.png" alt="" />
-          </button>
-        </div>
-        <div class="result-footer-actions">
-          <button id="anothaOneBtn" class="btn-gold" data-sound="custom">ANOTHA ONE</button>
+        <div id="postSendActions" class="result-footer-actions hidden">
+          <button id="anothaOneBtn" class="btn-gold" data-sound="custom">NEXT GAME</button>
           <button id="ggsBtn" class="btn-secondary" data-sound="custom">GGS</button>
         </div>
       </div>
@@ -154,6 +142,16 @@
           <p>Pick your categories and spin.</p>
         </div>
         <button id="gambleBtn" class="btn-gold" data-sound="custom">LET'S GO GAMBLING</button>
+      </div>
+    </section>
+
+    <!-- PLAYERS TAB -->
+    <section id="tab-players" class="tab-panel hidden">
+      <div class="panel">
+        <h2>WHO'S HERE</h2>
+        <div id="playersContainer" class="players-container">
+          <p>Loading players...</p>
+        </div>
       </div>
     </section>
 

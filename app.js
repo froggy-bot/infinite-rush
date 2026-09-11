@@ -12,6 +12,7 @@ import {
   deleteDoc,
   onSnapshot,
   runTransaction,
+  collection,
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
 // --- Firebase config (Froggy Bot project) ---
@@ -30,6 +31,7 @@ const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 
 const gameRef = doc(db, "games", "current");
+const usersCollectionRef = collection(db, "users");
 
 let currentUid = null;
 let currentName = null;
@@ -51,19 +53,16 @@ const nameCancelBtn = document.getElementById("nameCancelBtn");
 
 const idleView = document.getElementById("idleView");
 const votingView = document.getElementById("votingView");
-const resultsView = document.getElementById("resultsView");
+const votingHeading = document.getElementById("votingHeading");
 const startGameBtn = document.getElementById("startGameBtn");
+const sendItRow = document.getElementById("sendItRow");
 const sendItBtn = document.getElementById("sendItBtn");
 const sendItProgress = sendItBtn.querySelector(".send-it-progress");
 const sendItLabel = sendItBtn.querySelector(".btn-label");
 const tracksContainer = document.getElementById("tracksContainer");
 const voteMessage = document.getElementById("voteMessage");
 
-const resultTrackDisplay = document.getElementById("resultTrackDisplay");
-const likeBtn = document.getElementById("likeBtn");
-const likeIcon = document.getElementById("likeIcon");
-const favoriteBtn = document.getElementById("favoriteBtn");
-const favoriteIcon = document.getElementById("favoriteIcon");
+const postSendActions = document.getElementById("postSendActions");
 const anothaOneBtn = document.getElementById("anothaOneBtn");
 const ggsBtn = document.getElementById("ggsBtn");
 
@@ -75,6 +74,8 @@ const unreleasedFilter = document.getElementById("unreleasedFilter");
 const secretToggleLabel = document.getElementById("secretToggleLabel");
 const gambleBtn = document.getElementById("gambleBtn");
 const carResult = document.getElementById("carResult");
+
+const playersContainer = document.getElementById("playersContainer");
 
 const paletteBtn = document.getElementById("paletteBtn");
 const themeModalOverlay = document.getElementById("themeModalOverlay");
@@ -171,6 +172,12 @@ function playFavorite() {
   beep(1318, 0.05, 0.1, "square", 0.14);
 }
 
+// A "locking in" thunk-then-chime, distinct from playEnd() (used by GGS).
+function playSendIt() {
+  beep(220, 0, 0.08, "square", 0.15);
+  beep(880, 0.09, 0.14, "square", 0.16);
+}
+
 volumeBtn.classList.toggle("muted", isMuted);
 volumeBtn.addEventListener("click", () => {
   isMuted = !isMuted;
@@ -210,29 +217,63 @@ onAuthStateChanged(auth, (user) => {
   // Only run the one-time setup the first time we get a signed-in user.
   if (!appStarted) {
     appStarted = true;
-    initUserProfile();
-    listenToGame();
+    // Load the profile FIRST (and let it fully settle) before piling on
+    // more concurrent Firestore listeners/writes — fewer things competing
+    // at startup means fewer chances for a transient hiccup to look like
+    // "no profile exists yet".
+    initUserProfile().then(() => {
+      listenToGame();
+      listenToPlayers();
+      touchPresence();
+      setInterval(touchPresence, PRESENCE_INTERVAL_MS);
+    });
   }
 });
 
+// ---------- Presence ("who's connected"), a simple heartbeat since
+// Firestore (unlike Realtime Database) has no built-in onDisconnect. ----------
+const PRESENCE_INTERVAL_MS = 20000;
+const PRESENCE_STALE_MS = 45000;
+
+function touchPresence() {
+  if (!currentUid) return;
+  const userRef = doc(db, "users", currentUid);
+  setDoc(userRef, { lastSeen: Date.now() }, { merge: true }).catch((error) => {
+    console.error("Error updating presence:", error);
+  });
+}
+
 // ---------- User profile (name + icon), stored in Firestore under users/{uid} ----------
 async function initUserProfile() {
-  try {
-    const userRef = doc(db, "users", currentUid);
-    const snap = await getDoc(userRef);
-    const data = snap.exists() ? snap.data() : null;
+  const userRef = doc(db, "users", currentUid);
 
-    if (data && data.name && data.icon) {
-      currentName = data.name;
-      currentIcon = data.icon;
-      updateUserBadge();
-    } else {
-      openNameModal("create");
+  // Try twice before assuming there's genuinely no profile yet — a
+  // transient read hiccup shouldn't force a returning player to
+  // re-enter their name.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const snap = await getDoc(userRef);
+      const data = snap.exists() ? snap.data() : null;
+
+      if (data && data.name && data.icon) {
+        currentName = data.name;
+        currentIcon = data.icon;
+        updateUserBadge();
+      } else {
+        openNameModal("create");
+      }
+      return;
+    } catch (error) {
+      console.error(`Error loading user profile (attempt ${attempt}):`, error);
+      if (attempt === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
     }
-  } catch (error) {
-    console.error("Error loading user profile:", error);
-    openNameModal("create");
   }
+
+  // Both attempts failed — fall back to the create modal so the app
+  // doesn't get stuck, but this path should now be rare.
+  openNameModal("create");
 }
 
 function updateUserBadge() {
@@ -294,7 +335,7 @@ async function saveName() {
   nameSaveBtn.disabled = true;
   try {
     const userRef = doc(db, "users", currentUid);
-    await setDoc(userRef, { name: value, icon: selectedIconInModal }, { merge: true });
+    await setDoc(userRef, { name: value, icon: selectedIconInModal, lastSeen: Date.now() }, { merge: true });
     currentName = value;
     currentIcon = selectedIconInModal;
     updateUserBadge();
@@ -324,12 +365,13 @@ tabButtons.forEach((btn) => {
   });
 });
 
-// ---------- Game round lifecycle (idle <-> voting <-> results) ----------
+// ---------- Game round lifecycle (idle <-> voting <-> locked-in) ----------
 let activeGameStartedAt = null;
-let lastShownResultTrackId = null;
 let sendItTimerInterval = null;
+let isPlayingRollAnimation = false;
 
 const SEND_IT_WAIT_MS = 10000;
+const ROLL_ANIMATE_WINDOW_MS = 2500; // only animate if the round *just* started
 
 function listenToGame() {
   onSnapshot(
@@ -339,13 +381,7 @@ function listenToGame() {
         showIdleView();
         return;
       }
-
-      const data = snap.data();
-      if (data.resultTrack) {
-        showResultsView(data.resultTrack);
-      } else {
-        showVotingView(data);
-      }
+      showVotingView(snap.data());
     },
     (error) => {
       console.error("Error listening to the current game:", error);
@@ -356,35 +392,122 @@ function listenToGame() {
 function showIdleView() {
   idleView.classList.remove("hidden");
   votingView.classList.add("hidden");
-  resultsView.classList.add("hidden");
   stopSendItTimer();
   activeGameStartedAt = null;
-  lastShownResultTrackId = null;
+  isPlayingRollAnimation = false;
 }
 
 function showVotingView(data) {
   idleView.classList.add("hidden");
   votingView.classList.remove("hidden");
-  resultsView.classList.add("hidden");
 
-  const votesByUser = data.votesByUser || {};
-  renderTracks(data.tracks || {}, votesByUser);
+  const isLocked = Boolean(data.resultTrack);
+  const isNewRound = data.startedAt !== activeGameStartedAt;
+  if (isNewRound) activeGameStartedAt = data.startedAt;
 
-  if (data.startedAt !== activeGameStartedAt) {
-    activeGameStartedAt = data.startedAt;
+  const shouldAnimate =
+    !isLocked &&
+    isNewRound &&
+    !isPlayingRollAnimation &&
+    data.startedAt &&
+    Date.now() - data.startedAt < ROLL_ANIMATE_WINDOW_MS;
+
+  if (shouldAnimate) {
+    isPlayingRollAnimation = true;
+    playTrackRollAnimation(data.tracks || {}, () => {
+      isPlayingRollAnimation = false;
+      finishVotingRender(data, isLocked);
+      startSendItTimer(data.startedAt);
+    });
+    return;
+  }
+
+  if (isPlayingRollAnimation) return; // let the in-flight animation finish first
+
+  finishVotingRender(data, isLocked);
+
+  if (isLocked) {
+    stopSendItTimer();
+  } else if (isNewRound) {
     startSendItTimer(data.startedAt);
   }
 }
 
-function showResultsView(resultTrack) {
-  idleView.classList.add("hidden");
-  votingView.classList.add("hidden");
-  resultsView.classList.remove("hidden");
-  stopSendItTimer();
+function finishVotingRender(data, isLocked) {
+  renderTracks(data.tracks || {}, data.votesByUser || {}, isLocked, data.resultTrack);
+  votingHeading.textContent = isLocked ? "NOW RACING" : "VOTE FOR A TRACK";
+  sendItRow.classList.toggle("hidden", isLocked);
+  postSendActions.classList.toggle("hidden", !isLocked);
+}
 
-  if (resultTrack.trackId !== lastShownResultTrackId) {
-    lastShownResultTrackId = resultTrack.trackId;
-    renderResultTrack(resultTrack);
+// A one-time "rolling" reveal when a fresh round starts. With 5 tracks
+// animating at once, ticking a sound per card would be a wall of noise —
+// so the whole batch shares ONE tick sound per interval, and ONE reveal
+// chime when they land, instead of 5 of each.
+function playTrackRollAnimation(finalTracksObj, onComplete) {
+  const finalEntries = Object.entries(finalTracksObj);
+
+  tracksContainer.innerHTML = "";
+  votingHeading.textContent = "ROLLING TRACKS...";
+
+  // Keep the Send It row visible for continuity, but lock it until the
+  // real 10s timer kicks in once the tracks land.
+  sendItRow.classList.remove("hidden");
+  postSendActions.classList.add("hidden");
+  sendItBtn.disabled = true;
+  sendItProgress.style.width = "100%";
+  sendItLabel.textContent = "SEND IT";
+  voteMessage.textContent = "";
+
+  const slots = finalEntries.map(() => {
+    const card = document.createElement("div");
+    card.className = "track-card rolling";
+    card.innerHTML = `
+      <div class="track-info">
+        <span class="track-name">?</span>
+        <span class="track-creator">by ?</span>
+      </div>
+    `;
+    tracksContainer.appendChild(card);
+    return card;
+  });
+
+  const spinDurationMs = 1100;
+  const tickMs = 90;
+  const startedAt = Date.now();
+
+  const spinInterval = setInterval(() => {
+    slots.forEach((slot) => {
+      const randomTrack = trackPool[Math.floor(Math.random() * trackPool.length)];
+      slot.querySelector(".track-name").textContent = randomTrack.name;
+      slot.querySelector(".track-creator").textContent = `by ${randomTrack.creator}`;
+    });
+    playSpinTick(); // one shared tick for the whole batch, not per-card
+
+    if (Date.now() - startedAt >= spinDurationMs) {
+      clearInterval(spinInterval);
+      cascadeReveal();
+    }
+  }, tickMs);
+
+  function cascadeReveal() {
+    playReveal(); // one shared chime for the whole batch, not per-card
+
+    finalEntries.forEach(([, info], index) => {
+      setTimeout(() => {
+        const slot = slots[index];
+        slot.classList.remove("rolling");
+        slot.classList.add("landed");
+        slot.innerHTML = `
+          <div class="track-info">
+            <span class="track-name">${info.name}</span>
+            <span class="track-creator">by ${info.creator}</span>
+          </div>
+        `;
+      }, index * 100);
+    });
+
+    setTimeout(onComplete, finalEntries.length * 100 + 250);
   }
 }
 
@@ -409,7 +532,6 @@ function updateSendItProgress(startedAt) {
     stopSendItTimer();
   } else {
     sendItBtn.disabled = true;
-    sendItLabel.textContent = `SEND IT (${Math.ceil(remaining / 1000)}s)`;
   }
 }
 
@@ -460,11 +582,11 @@ startGameBtn.addEventListener("click", startGame);
 anothaOneBtn.addEventListener("click", startGame);
 
 // Picks the winning track (ties broken randomly) and moves the round into
-// the results phase. Guarded so it's safe even if two players click at
+// the locked-in phase. Guarded so it's safe even if two players click at
 // the same moment — whichever transaction runs first decides the winner,
 // the other becomes a no-op.
 async function sendIt() {
-  playEnd();
+  playSendIt();
   try {
     await runTransaction(db, async (transaction) => {
       const snap = await transaction.get(gameRef);
@@ -496,38 +618,89 @@ async function sendIt() {
 sendItBtn.addEventListener("click", sendIt);
 
 // ---------- Track voting (freely changeable until "Send It") ----------
-function renderTracks(tracksObj, votesByUser) {
+// Once locked (resultTrack set): counts/voters disappear, the winning card
+// shows like/favorite buttons in their place, and the rest are dimmed.
+function renderTracks(tracksObj, votesByUser, isLocked, resultTrack) {
   tracksContainer.innerHTML = "";
   const myTrackId = currentUid ? votesByUser[currentUid] : undefined;
+  const winnerId = resultTrack ? resultTrack.trackId : null;
 
   Object.entries(tracksObj).forEach(([trackId, info]) => {
-    const card = document.createElement("button");
-    card.type = "button";
+    const isWinner = isLocked && trackId === winnerId;
+    const card = document.createElement(isLocked ? "div" : "button");
     card.className = "track-card";
-    card.dataset.sound = "custom";
-    if (trackId === myTrackId) card.classList.add("selected");
 
-    const voters = info.voters || [];
-    const votersHtml = voters
-      .map((v) => `<img src="FroggySprites/${v.icon}" alt="" title="${v.name || ""}" />`)
-      .join("");
+    if (isLocked) {
+      card.classList.add(isWinner ? "winner" : "dimmed");
+    } else {
+      card.type = "button";
+      card.dataset.sound = "custom";
+      if (trackId === myTrackId) card.classList.add("selected");
+      card.addEventListener("click", () => voteForTrack(trackId));
+    }
+
+    let rightHtml = "";
+    if (isWinner) {
+      rightHtml = `
+        <div class="track-right winner-actions">
+          <button type="button" class="icon-action-btn" data-role="like" aria-label="Like" title="Like">
+            <img data-role="like-icon" src="froggy-like-unchecked.png" alt="" />
+          </button>
+          <button type="button" class="icon-action-btn" data-role="favorite" data-sound="custom" aria-label="Favorite" title="Favorite">
+            <img data-role="favorite-icon" src="star-unchecked.png" alt="" />
+          </button>
+        </div>
+      `;
+    } else if (!isLocked) {
+      const voters = info.voters || [];
+      const votersHtml = voters
+        .map((v) => `<img src="FroggySprites/${v.icon}" alt="" title="${v.name || ""}" />`)
+        .join("");
+      rightHtml = `
+        <div class="track-right">
+          <div class="track-voters">${votersHtml}</div>
+          <span class="track-votes">${info.votes}</span>
+        </div>
+      `;
+    }
 
     card.innerHTML = `
       <div class="track-info">
         <span class="track-name">${info.name}</span>
         <span class="track-creator">by ${info.creator}</span>
       </div>
-      <div class="track-right">
-        <div class="track-voters">${votersHtml}</div>
-        <span class="track-votes">${info.votes}</span>
-      </div>
+      ${rightHtml}
     `;
 
-    card.addEventListener("click", () => voteForTrack(trackId));
     tracksContainer.appendChild(card);
+
+    if (isWinner) {
+      wireLikeButton(card.querySelector('[data-role="like"]'));
+      wireFavoriteButton(card.querySelector('[data-role="favorite"]'));
+    }
   });
 
-  voteMessage.textContent = myTrackId ? "Your vote is in!" : "";
+  voteMessage.textContent = !isLocked && myTrackId ? "Your vote is in!" : "";
+}
+
+function wireLikeButton(btn) {
+  const icon = btn.querySelector("img");
+  btn.addEventListener("click", () => {
+    const isNowActive = btn.classList.toggle("active");
+    icon.src = isNowActive ? "froggy-like-checked.png" : "froggy-like-unchecked.png";
+  });
+}
+
+function wireFavoriteButton(btn) {
+  const icon = btn.querySelector("img");
+  btn.addEventListener("click", () => {
+    const isNowActive = btn.classList.toggle("active");
+    icon.src = isNowActive ? "star-checked.png" : "star-unchecked.png";
+    if (isNowActive) {
+      spawnSparkles(btn, 10);
+      playFavorite();
+    }
+  });
 }
 
 async function voteForTrack(trackId) {
@@ -576,32 +749,6 @@ async function voteForTrack(trackId) {
     voteMessage.textContent = "Something went wrong. Try again.";
   }
 }
-
-// ---------- Results view: winning track + like/favorite (visual only for now) ----------
-function renderResultTrack(resultTrack) {
-  resultTrackDisplay.innerHTML = `
-    <p class="result-track-name">${resultTrack.name}</p>
-    <p class="result-track-creator">by ${resultTrack.creator}</p>
-  `;
-  likeBtn.classList.remove("active");
-  likeIcon.src = "froggy-like-unchecked.png";
-  favoriteBtn.classList.remove("active");
-  favoriteIcon.src = "star-unchecked.png";
-}
-
-likeBtn.addEventListener("click", () => {
-  const isNowActive = likeBtn.classList.toggle("active");
-  likeIcon.src = isNowActive ? "froggy-like-checked.png" : "froggy-like-unchecked.png";
-});
-
-favoriteBtn.addEventListener("click", () => {
-  const isNowActive = favoriteBtn.classList.toggle("active");
-  favoriteIcon.src = isNowActive ? "star-checked.png" : "star-unchecked.png";
-  if (isNowActive) {
-    spawnSparkles(favoriteBtn, 10);
-    playFavorite();
-  }
-});
 
 // "GGS" closes out the race entirely, back to the very first "Start Game"
 // screen — unlike "Anotha One", it does NOT queue up a new round.
@@ -704,6 +851,17 @@ function spinForCar() {
         playLegendary();
       } else {
         playReveal();
+      }
+
+      if (currentUid) {
+        const userRef = doc(db, "users", currentUid);
+        setDoc(
+          userRef,
+          { currentCar: { name: finalCar.name, category: finalCar.category } },
+          { merge: true }
+        ).catch((error) => {
+          console.error("Error saving current car:", error);
+        });
       }
 
       gambleBtn.disabled = false;
@@ -847,3 +1005,60 @@ themeResetBtn.addEventListener("click", () => {
 });
 
 loadTheme();
+
+// ---------- Players tab: who's currently connected ----------
+let allUsersCache = {};
+
+function listenToPlayers() {
+  onSnapshot(
+    usersCollectionRef,
+    (snap) => {
+      allUsersCache = {};
+      snap.forEach((docSnap) => {
+        allUsersCache[docSnap.id] = docSnap.data();
+      });
+      renderPlayers();
+    },
+    (error) => {
+      console.error("Error listening to players:", error);
+    }
+  );
+
+  // Re-render on a timer too, so someone who went stale (closed the tab)
+  // drops off the list even without a fresh snapshot arriving.
+  setInterval(renderPlayers, 5000);
+}
+
+function renderPlayers() {
+  const now = Date.now();
+  const connected = Object.values(allUsersCache).filter(
+    (player) => player.lastSeen && now - player.lastSeen < PRESENCE_STALE_MS
+  );
+
+  playersContainer.innerHTML = "";
+
+  if (connected.length === 0) {
+    playersContainer.innerHTML = "<p>No one else is here right now.</p>";
+    return;
+  }
+
+  connected
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+    .forEach((player) => {
+      const row = document.createElement("div");
+      row.className = "player-card";
+
+      const hasCar = Boolean(player.currentCar && player.currentCar.name);
+      const carText = hasCar ? player.currentCar.name : "No car rolled yet";
+
+      row.innerHTML = `
+        <img src="FroggySprites/${player.icon}" alt="" class="player-icon" />
+        <div class="player-info">
+          <span class="player-name">${player.name}</span>
+          <span class="player-car${hasCar ? "" : " none"}">${carText}</span>
+        </div>
+      `;
+
+      playersContainer.appendChild(row);
+    });
+}
