@@ -69,13 +69,106 @@ const ggsBtn = document.getElementById("ggsBtn");
 const tabButtons = document.querySelectorAll(".tab-btn");
 const tabPanels = document.querySelectorAll(".tab-panel");
 
-const categoryCheckboxes = document.querySelectorAll(".category-filter");
+const categoryFiltersContainer = document.getElementById("categoryFiltersContainer");
 const unreleasedFilter = document.getElementById("unreleasedFilter");
 const secretToggleLabel = document.getElementById("secretToggleLabel");
 const gambleBtn = document.getElementById("gambleBtn");
 const carResult = document.getElementById("carResult");
 
+const gameToggleButtons = document.querySelectorAll(".game-toggle-btn");
+
+// ---------- Build game2Tracks from game2TrackCollections (data-game2.js) ----------
+// data-game2.js defines tracks grouped by creator: a small { localId: "Name" }
+// object per creator, plus a `game2TrackCollections` registry pairing each
+// one with a numeric `prefix`. (It's exposed under that name, not the bare
+// `trackCollections` used inside its own IIFE, because data.js — Game 1 —
+// declares its OWN global `trackCollections` for the same pattern; two
+// globals with the same name from two different files collide.) This
+// flattens it into the same flat {id, name, creator} shape used everywhere
+// else (trackPool, game2Cars), computing each track's global id as
+// `prefix * 1000 + localId` — e.g. Fidestic (prefix 9), track #1 -> id 9001.
+// That multiplier assumes no single creator ever has 1000+ tracks.
+// To drop a creator from Game 2 entirely, comment out its line inside
+// `trackCollections` in data-game2.js with `//` — its `const` object can
+// stay defined above, just unreferenced.
+function buildGame2Tracks() {
+  const flat = [];
+  Object.entries(game2TrackCollections).forEach(([creatorName, entry]) => {
+    const { prefix, tracks } = entry;
+    Object.entries(tracks).forEach(([localId, name]) => {
+      flat.push({
+        id: prefix * 1000 + Number(localId),
+        name,
+        creator: creatorName,
+      });
+    });
+  });
+  return flat;
+}
+
+const game2Tracks = buildGame2Tracks();
+
+// ---------- Active game version (Game 1 / Game 2) ----------
+// Game 1 (carPool/trackPool, from data.js) and Game 2 (game2Cars/game2Tracks,
+// from data-game2.js) are two completely separate pools — different car
+// classes, different tracks, never mixed. This is a personal/local choice
+// (localStorage), not synced: it decides which pool YOUR OWN actions (Start
+// Game, Garage rolls, Tracks search) pull from. Once a voting round exists
+// in Firestore it carries its own `gameVersion` and renders from the data
+// already baked into it, regardless of what your toggle is set to later.
+const GAME_VERSION_KEY = "froggybot-game-version";
+
+let activeGameVersion = 1;
+try {
+  const saved = parseInt(localStorage.getItem(GAME_VERSION_KEY), 10);
+  if (saved === 1 || saved === 2) activeGameVersion = saved;
+} catch (error) {
+  activeGameVersion = 1;
+}
+
+let activeCarPool = [];
+let activeTrackPool = [];
+
+function setActiveGame(version) {
+  activeGameVersion = version;
+  activeCarPool = version === 2 ? game2Cars : carPool;
+  activeTrackPool = version === 2 ? game2Tracks : trackPool;
+
+  try {
+    localStorage.setItem(GAME_VERSION_KEY, String(version));
+  } catch (error) {
+    console.error("Error saving active game version:", error);
+  }
+
+  gameToggleButtons.forEach((btn) => {
+    btn.classList.toggle("active", Number(btn.dataset.game) === version);
+  });
+
+  // The "unreleased" secret toggle only makes sense for Game 1's data
+  // (Game 2 cars don't have a `released` field at all) — reset it so it
+  // can't silently zero out the Game 2 pool.
+  unreleasedFilter.checked = false;
+  secretToggleLabel.classList.remove("revealed");
+
+  buildCategoryFilters();
+  carResult.classList.remove("locked-in", "legendary", "spinning");
+  carResult.innerHTML = "<p>Pick your categories and spin.</p>";
+
+  populateCreatorFilter();
+  renderTrackLibrary();
+}
+
+gameToggleButtons.forEach((btn) => {
+  btn.addEventListener("click", () => setActiveGame(Number(btn.dataset.game)));
+});
+
 const playersContainer = document.getElementById("playersContainer");
+
+const trackSearchInput = document.getElementById("trackSearchInput");
+const trackCreatorFilter = document.getElementById("trackCreatorFilter");
+const filterLikedBtn = document.getElementById("filterLikedBtn");
+const filterFavoritedBtn = document.getElementById("filterFavoritedBtn");
+const trackLibraryContainer = document.getElementById("trackLibraryContainer");
 
 const paletteBtn = document.getElementById("paletteBtn");
 const themeModalOverlay = document.getElementById("themeModalOverlay");
@@ -478,7 +571,7 @@ function playTrackRollAnimation(finalTracksObj, onComplete) {
 
   const spinInterval = setInterval(() => {
     slots.forEach((slot) => {
-      const randomTrack = trackPool[Math.floor(Math.random() * trackPool.length)];
+      const randomTrack = activeTrackPool[Math.floor(Math.random() * activeTrackPool.length)];
       slot.querySelector(".track-name").textContent = randomTrack.name;
       slot.querySelector(".track-creator").textContent = `by ${randomTrack.creator}`;
     });
@@ -542,7 +635,7 @@ function startSendItTimer(startedAt) {
 }
 
 function pickRandomTracks(amount = 5) {
-  const copy = [...trackPool];
+  const copy = [...activeTrackPool];
   const chosen = [];
 
   while (chosen.length < amount && copy.length > 0) {
@@ -555,11 +648,25 @@ function pickRandomTracks(amount = 5) {
 }
 
 async function startGame() {
+  const chosen = pickRandomTracks(5);
+
+  // Guard against creating a round with too few tracks (e.g. if someone
+  // comments out most/all creators in trackCollections) — that used to
+  // silently create a broken "Send It does nothing" round sitting in
+  // Firestore for everyone until someone happened to overwrite it.
+  if (chosen.length < 5) {
+    alert(
+      `Only ${chosen.length} track(s) available for this game — need at least 5. ` +
+        `Check trackCollections in ${activeGameVersion === 2 ? "data-game2.js" : "data.js"} ` +
+        "(too many creators commented out?)."
+    );
+    return;
+  }
+
   startGameBtn.disabled = true;
   anothaOneBtn.disabled = true;
   playStart();
   try {
-    const chosen = pickRandomTracks(5);
     const tracksData = {};
     chosen.forEach((track) => {
       tracksData[track.id] = { name: track.name, creator: track.creator, votes: 0, voters: [] };
@@ -569,6 +676,7 @@ async function startGame() {
       tracks: tracksData,
       votesByUser: {},
       startedAt: Date.now(),
+      gameVersion: activeGameVersion,
     });
   } catch (error) {
     console.error("Error starting game:", error);
@@ -764,8 +872,32 @@ async function ggs() {
 ggsBtn.addEventListener("click", ggs);
 
 // ---------- Garage: random car with category filters ----------
+// The checkboxes are rebuilt per active game (Game 1 has 4 fixed categories,
+// Game 2 has 10 car classes pulled straight from its own data), so they're
+// queried live each time rather than cached in a NodeList captured once.
+function buildCategoryFilters() {
+  const categories = [...new Set(activeCarPool.map((car) => car.category))].sort();
+
+  categoryFiltersContainer.innerHTML = "";
+  categories.forEach((category) => {
+    const label = document.createElement("label");
+    label.className = "checkbox-label";
+    label.innerHTML = `
+      <input type="checkbox" class="category-filter" value="${category}" checked />
+      ${category.toUpperCase()}
+    `;
+    categoryFiltersContainer.appendChild(label);
+  });
+
+  categoryFiltersContainer
+    .querySelectorAll(".category-filter")
+    .forEach((cb) => cb.addEventListener("change", updateGambleButtonState));
+
+  updateGambleButtonState();
+}
+
 function getSelectedCategories() {
-  return Array.from(categoryCheckboxes)
+  return Array.from(categoryFiltersContainer.querySelectorAll(".category-filter"))
     .filter((cb) => cb.checked)
     .map((cb) => cb.value);
 }
@@ -773,9 +905,6 @@ function getSelectedCategories() {
 function updateGambleButtonState() {
   gambleBtn.disabled = getSelectedCategories().length === 0;
 }
-
-categoryCheckboxes.forEach((cb) => cb.addEventListener("change", updateGambleButtonState));
-updateGambleButtonState();
 
 unreleasedFilter.addEventListener("change", (event) => {
   if (event.target.checked) {
@@ -800,13 +929,192 @@ function spawnSparkles(container, count) {
   }
 }
 
+// Actual min/max across the Game 2 roster for the two stats that are still
+// scaled off the real numbers (boost power and weight both spread out
+// reasonably linearly, so min-max works fine for them).
+const STAT_SCALE_RANGE = {
+  boostPower: { min: 42.9, max: 131.5 },
+  baseWeight: { min: 400, max: 3000 },
+};
+
+// Top speed is NOT linear-scaled: most of the roster sits bunched between
+// ~90-96, with only a handful of cars near 88 or near 98. A percentile rank
+// (what fraction of the roster you're at or above) spreads cars out across
+// the bar according to how the data actually clusters, rather than how far
+// they sit from an arbitrary min/max.
+const TOP_SPEED_SORTED = game2Cars
+  .map((car) => (car.stats ? car.stats.topSpeed : null))
+  .filter((v) => v != null)
+  .sort((a, b) => a - b);
+
+function topSpeedPercentile(value) {
+  if (TOP_SPEED_SORTED.length === 0) return 0;
+  let countAtOrBelow = 0;
+  for (const v of TOP_SPEED_SORTED) {
+    if (v <= value) countAtOrBelow++;
+  }
+  return countAtOrBelow / TOP_SPEED_SORTED.length;
+}
+
+// Drift gain and passive gain are nearly identical (both basically a
+// per-class constant with a couple of one-off cars), so they're merged
+// into a single "BOOST GAIN" stat. Rather than scale off the real numbers
+// (which left everything except Rally/Heavy/Swift sitting at 1 bar), each
+// class gets a deliberately-chosen, slightly stylized bar count instead.
+const CLASS_BOOST_GAIN_PIPS = {
+  Rocket: 1,
+  Bike: 1,
+  Drifter: 1,
+  Balanced: 2,
+  Swift: 5,
+  "Off-Road": 7,
+  Rally: 7,
+  Quad: 7,
+  "Monster Truck": 10,
+  Heavy: 10,
+};
+
+// Same idea as boost gain: weight is mostly class-determined, so each class
+// gets a stylized default bar count. A handful of specific cars have their
+// own weight modifier in the data and get an individual override instead.
+// NOTE: Rally has no class default yet (pending confirmation) — cars in
+// that class fall back to a real min-max bar off baseWeight instead.
+const CLASS_WEIGHT_PIPS = {
+  "Monster Truck": 10,
+  Heavy: 10,
+  "Off-Road": 9,
+  Rally: 9,
+  Drifter: 7,
+  Balanced: 7,
+  Swift: 4,
+  Rocket: 3,
+  Quad: 2,
+  Bike: 1,
+};
+
+const CAR_WEIGHT_PIPS_OVERRIDE = {
+  "Roller Toaster": 8,
+  "2018 Ford Mustang GT": 6,
+  "Mountain Mauler": 6,
+  "Mercedes-Benz 300 SL": 5,
+  Sandivore: 4,
+  "Track Manga": 3,
+  "Bump Around": 3,
+  "Surf 'N Turf": 2,
+};
+
+function getWeightPips(car) {
+  if (CAR_WEIGHT_PIPS_OVERRIDE[car.name] != null) return CAR_WEIGHT_PIPS_OVERRIDE[car.name];
+  if (CLASS_WEIGHT_PIPS[car.category] != null) return CLASS_WEIGHT_PIPS[car.category];
+  return null;
+}
+
+function buildPipBar(filledCount, segments = 10) {
+  const filled = Math.max(0, Math.min(segments, filledCount));
+  let html = '<span class="stat-bar">';
+  for (let i = 0; i < segments; i++) {
+    html += `<span class="stat-bar-seg${i < filled ? " filled" : ""}"></span>`;
+  }
+  html += "</span>";
+  return html;
+}
+
+function buildStatBar(value, range, segments = 10) {
+  const { min, max } = range;
+  const ratio = max > min ? (value - min) / (max - min) : 1;
+  // Floor at 1 segment so a car at the bottom of the range still reads as
+  // "has this stat", not as a blank/broken bar.
+  const filled = Math.max(1, Math.min(segments, Math.round(ratio * segments)));
+  return buildPipBar(filled, segments);
+}
+
+// The one exception to "stats are bars": boost renders as a row of shapes —
+// circles for Charge, rounded pill-bars for Bar — one per boost amount.
+function buildBoostIcons(amount, type) {
+  const shape = (type || "").toLowerCase() === "bar" ? "bar" : "charge";
+  let html = '<span class="boost-icons">';
+  for (let i = 0; i < amount; i++) {
+    html += `<span class="boost-icon ${shape}"></span>`;
+  }
+  html += "</span>";
+  return html;
+}
+
+function statRow(label, barHtml, valueText) {
+  return `
+    <div class="stat-row">
+      <span class="stat-label">${label}</span>
+      ${barHtml}
+      <span class="stat-value">${valueText}</span>
+    </div>
+  `;
+}
+
+function statBarRow(label, value, scaleKey, unit = "") {
+  if (value == null) return "";
+  return statRow(label, buildStatBar(value, STAT_SCALE_RANGE[scaleKey]), `${value}${unit}`);
+}
+
+// Game 2 cars carry real stats; Game 1 cars don't (and that's fine — we
+// just skip this block entirely when `stats` isn't there).
+function buildStatsHtml(car) {
+  const stats = car.stats;
+  if (!stats) return "";
+
+  let html = '<div class="car-stats">';
+
+  if (stats.topSpeed != null) {
+    const filled = Math.max(1, Math.round(topSpeedPercentile(stats.topSpeed) * 10));
+    html += statRow("TOP SPEED", buildPipBar(filled), stats.topSpeed);
+  }
+
+  html += statBarRow("BOOST POWER", stats.boostPower, "boostPower");
+
+  const gainPips = CLASS_BOOST_GAIN_PIPS[car.category];
+  if (gainPips != null) {
+    // The bar is the stylized per-class pip count; the number shown is
+    // drift gain specifically (passive gain tracks it closely but isn't
+    // identical, so showing both would be redundant — drift wins).
+    html += statRow("BOOST GAIN", buildPipBar(gainPips), stats.driftBoostGain != null ? stats.driftBoostGain : "");
+  }
+
+  if (stats.baseWeight != null) {
+    const weightPips = getWeightPips(car);
+    const weightBar =
+      weightPips != null ? buildPipBar(weightPips) : buildStatBar(stats.baseWeight, STAT_SCALE_RANGE.baseWeight);
+    html += statRow("WEIGHT", weightBar, stats.baseWeight);
+  }
+
+  if (stats.boostAmount != null) {
+    html += `
+      <div class="stat-row">
+        <span class="stat-label">BOOST</span>
+        ${buildBoostIcons(stats.boostAmount, stats.boostType)}
+        <span class="stat-value">${stats.boostAmount}</span>
+      </div>
+    `;
+  }
+
+  if (stats.banned) {
+    html +=
+      '<div class="stat-row banned"><span class="stat-label">BANNED</span><span class="stat-spacer"></span><span class="stat-value">YES</span></div>';
+  }
+
+  html += "</div>";
+  return html;
+}
+
 function spinForCar() {
   const categories = getSelectedCategories();
   const includeUnreleased = unreleasedFilter.checked;
-  
-  const pool = carPool.filter((car) => {
+
+  const pool = activeCarPool.filter((car) => {
     const matchesCategory = categories.includes(car.category);
-    const matchesReleaseStatus = includeUnreleased ? true : car.released === true;
+    // The "unreleased" secret toggle is a Game 1 concept only — Game 2 cars
+    // have no `released` field at all, so it's a no-op for them rather
+    // than silently filtering the whole pool down to nothing.
+    const matchesReleaseStatus =
+      car.released === undefined ? true : includeUnreleased ? true : car.released === true;
     return matchesCategory && matchesReleaseStatus;
   });
 
@@ -841,6 +1149,7 @@ function spinForCar() {
         <p class="car-name">${finalCar.name}</p>
         <p class="car-category">${finalCar.category.toUpperCase()}</p>
         ${isLegendary ? '<p class="sth-badge">★ SUPER TREASURE HUNT ★</p>' : ""}
+        ${buildStatsHtml(finalCar)}
       `;
       carResult.classList.remove("spinning");
       carResult.classList.add("locked-in");
@@ -857,7 +1166,13 @@ function spinForCar() {
         const userRef = doc(db, "users", currentUid);
         setDoc(
           userRef,
-          { currentCar: { name: finalCar.name, category: finalCar.category } },
+          {
+            currentCar: {
+              name: finalCar.name,
+              category: finalCar.category,
+              gameVersion: activeGameVersion,
+            },
+          },
           { merge: true }
         ).catch((error) => {
           console.error("Error saving current car:", error);
@@ -1062,3 +1377,80 @@ function renderPlayers() {
       playersContainer.appendChild(row);
     });
 }
+
+// ---------- Tracks tab: browse/search the full library (no voting here) ----------
+// Purely local (trackPool from data.js) — no Firestore needed, so this can
+// run immediately without waiting on auth.
+function populateCreatorFilter() {
+  const creators = [...new Set(activeTrackPool.map((track) => track.creator))].sort();
+  trackCreatorFilter.innerHTML =
+    '<option value="">All creators</option>' +
+    creators.map((creator) => `<option value="${creator}">${creator}</option>`).join("");
+}
+
+function getFilteredTracks() {
+  const query = trackSearchInput.value.trim().toLowerCase();
+  const creator = trackCreatorFilter.value;
+
+  return activeTrackPool.filter((track) => {
+    const matchesName = !query || track.name.toLowerCase().includes(query);
+    const matchesCreator = !creator || track.creator === creator;
+    return matchesName && matchesCreator;
+  });
+  // Note: the LIKED/FAVORITED toggle buttons don't filter this list yet —
+  // there's nowhere to read that from until like/favorite get persisted.
+}
+
+function renderTrackLibraryRow(track) {
+  const row = document.createElement("div");
+  row.className = "track-card";
+  row.innerHTML = `
+    <div class="track-info">
+      <span class="track-name">${track.name}</span>
+      <span class="track-creator">by ${track.creator}</span>
+    </div>
+    <div class="track-right winner-actions">
+      <button type="button" class="icon-action-btn" data-role="like" aria-label="Like" title="Like">
+        <img data-role="like-icon" src="froggy-like-unchecked.png" alt="" />
+      </button>
+      <button type="button" class="icon-action-btn" data-role="favorite" data-sound="custom" aria-label="Favorite" title="Favorite">
+        <img data-role="favorite-icon" src="star-unchecked.png" alt="" />
+      </button>
+    </div>
+  `;
+
+  wireLikeButton(row.querySelector('[data-role="like"]'));
+  wireFavoriteButton(row.querySelector('[data-role="favorite"]'));
+
+  return row;
+}
+
+function renderTrackLibrary() {
+  const filtered = getFilteredTracks();
+  trackLibraryContainer.innerHTML = "";
+
+  if (filtered.length === 0) {
+    trackLibraryContainer.innerHTML = "<p>No tracks match your search.</p>";
+    return;
+  }
+
+  filtered.forEach((track) => {
+    trackLibraryContainer.appendChild(renderTrackLibraryRow(track));
+  });
+}
+
+trackSearchInput.addEventListener("input", renderTrackLibrary);
+trackCreatorFilter.addEventListener("change", renderTrackLibrary);
+
+// Not wired to actual filtering yet — just a visual toggle until
+// like/favorite get persisted somewhere to filter against.
+filterLikedBtn.addEventListener("click", () => {
+  filterLikedBtn.classList.toggle("active");
+});
+filterFavoritedBtn.addEventListener("click", () => {
+  filterFavoritedBtn.classList.toggle("active");
+});
+
+// Sets activeCarPool/activeTrackPool, builds the category checkboxes, and
+// populates the Tracks tab for whichever game was active last time.
+setActiveGame(activeGameVersion);

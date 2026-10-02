@@ -169,6 +169,26 @@ h1 {
   image-rendering: pixelated;
 }
 
+/* ---------- Game version toggle ---------- */
+
+.game-toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.game-toggle-btn {
+  flex: 1;
+  background: var(--panel);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.game-toggle-btn.active {
+  background: var(--pink);
+  color: var(--black);
+}
+
 /* ---------- Tabs ---------- */
 
 .tabs {
@@ -407,6 +427,60 @@ h2 {
   color: var(--text-dim);
 }
 
+/* ---------- Tracks tab (search/browse library) ---------- */
+
+.track-search-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+#trackSearchInput {
+  flex: 1;
+  min-width: 140px;
+  font-family: var(--font-body);
+  font-size: 20px;
+  background: var(--bg);
+  color: var(--text);
+  border: 3px solid var(--border);
+  padding: 8px 10px;
+  border-radius: 0;
+}
+
+#trackSearchInput:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
+#trackCreatorFilter {
+  font-family: var(--font-body);
+  font-size: 20px;
+  background: var(--bg);
+  color: var(--text);
+  border: 3px solid var(--border);
+  padding: 8px 10px;
+  border-radius: 0;
+  cursor: url('cursor.png') 4 4, pointer;
+}
+
+.track-filter-toggles {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.filter-toggle-btn {
+  background: var(--panel-light);
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.filter-toggle-btn.active {
+  background: var(--gold);
+  color: var(--black);
+}
+
 /* ---------- Garage ---------- */
 
 .filters {
@@ -502,6 +576,92 @@ input[type="checkbox"].category-filter:checked::after,
   font-family: var(--font-display);
   font-size: 12px;
   color: var(--cyan) !important;
+}
+
+/* ---------- Game 2 car stats block ---------- */
+
+.car-stats {
+  width: 100%;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 15px;
+}
+
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px dashed var(--text-dim);
+  padding: 3px 4px;
+}
+
+.stat-label {
+  color: var(--text-dim);
+  flex-shrink: 0;
+  width: 100px;
+}
+
+.stat-value {
+  color: var(--text);
+  flex-shrink: 0;
+  min-width: 46px;
+  text-align: right;
+}
+
+.stat-row.banned .stat-value {
+  color: var(--pink);
+}
+
+.stat-spacer {
+  flex: 1;
+}
+
+/* Segmented bar for most numeric stats */
+.stat-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+}
+
+.stat-bar-seg {
+  flex: 1;
+  height: 10px;
+  background: var(--panel);
+  border: 1px solid var(--text-dim);
+}
+
+.stat-bar-seg.filled {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+/* Boost is the exception: circles for Charge, rounded bars for Bar */
+.boost-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.boost-icon {
+  flex-shrink: 0;
+  background: var(--cyan);
+  border: 1px solid var(--black);
+}
+
+.boost-icon.charge {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.boost-icon.bar {
+  width: 18px;
+  height: 8px;
+  border-radius: 4px;
 }
 
 .car-result.spinning {
