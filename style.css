@@ -292,6 +292,10 @@ h2 {
   padding-top: 12px;
 }
 
+#rerollBtn {
+  flex-shrink: 0;
+}
+
 #sendItBtn {
   position: relative;
   overflow: hidden;

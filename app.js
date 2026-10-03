@@ -59,6 +59,7 @@ const sendItRow = document.getElementById("sendItRow");
 const sendItBtn = document.getElementById("sendItBtn");
 const sendItProgress = sendItBtn.querySelector(".send-it-progress");
 const sendItLabel = sendItBtn.querySelector(".btn-label");
+const rerollBtn = document.getElementById("rerollBtn");
 const tracksContainer = document.getElementById("tracksContainer");
 const voteMessage = document.getElementById("voteMessage");
 
@@ -665,6 +666,7 @@ async function startGame() {
 
   startGameBtn.disabled = true;
   anothaOneBtn.disabled = true;
+  rerollBtn.disabled = true;
   playStart();
   try {
     const tracksData = {};
@@ -683,11 +685,15 @@ async function startGame() {
   } finally {
     startGameBtn.disabled = false;
     anothaOneBtn.disabled = false;
+    rerollBtn.disabled = false;
   }
 }
 
 startGameBtn.addEventListener("click", startGame);
 anothaOneBtn.addEventListener("click", startGame);
+// Reroll is the same operation as Start Game: wipe the current tracks and
+// pick 5 fresh ones. Repeats are fine, no need to exclude the old 5.
+rerollBtn.addEventListener("click", startGame);
 
 // Picks the winning track (ties broken randomly) and moves the round into
 // the locked-in phase. Guarded so it's safe even if two players click at
@@ -977,8 +983,6 @@ const CLASS_BOOST_GAIN_PIPS = {
 // Same idea as boost gain: weight is mostly class-determined, so each class
 // gets a stylized default bar count. A handful of specific cars have their
 // own weight modifier in the data and get an individual override instead.
-// NOTE: Rally has no class default yet (pending confirmation) — cars in
-// that class fall back to a real min-max bar off baseWeight instead.
 const CLASS_WEIGHT_PIPS = {
   "Monster Truck": 10,
   Heavy: 10,
@@ -991,6 +995,38 @@ const CLASS_WEIGHT_PIPS = {
   Quad: 2,
   Bike: 1,
 };
+
+// Same pattern again, now for boost power: class default + individual
+// overrides for the same handful of cars that have a weight modifier.
+const CLASS_BOOST_POWER_PIPS = {
+  Bike: 10,
+  Quad: 10,
+  Rocket: 8,
+  Swift: 7,
+  Rally: 5,
+  Balanced: 5,
+  Drifter: 4,
+  "Off-Road": 3,
+  Heavy: 1,
+  "Monster Truck": 0,
+};
+
+const CAR_BOOST_POWER_PIPS_OVERRIDE = {
+  "Surf 'N Turf": 9,
+  Sandivore: 9,
+  "Track Manga": 9,
+  "Bump Around": 8,
+  "Mountain Mauler": 8,
+  "Mercedes-Benz 300 SL": 8,
+  "2018 Ford Mustang GT": 5,
+  "Roller Toaster": 3,
+};
+
+function getBoostPowerPips(car) {
+  if (CAR_BOOST_POWER_PIPS_OVERRIDE[car.name] != null) return CAR_BOOST_POWER_PIPS_OVERRIDE[car.name];
+  if (CLASS_BOOST_POWER_PIPS[car.category] != null) return CLASS_BOOST_POWER_PIPS[car.category];
+  return null;
+}
 
 const CAR_WEIGHT_PIPS_OVERRIDE = {
   "Roller Toaster": 8,
@@ -1050,11 +1086,6 @@ function statRow(label, barHtml, valueText) {
   `;
 }
 
-function statBarRow(label, value, scaleKey, unit = "") {
-  if (value == null) return "";
-  return statRow(label, buildStatBar(value, STAT_SCALE_RANGE[scaleKey]), `${value}${unit}`);
-}
-
 // Game 2 cars carry real stats; Game 1 cars don't (and that's fine — we
 // just skip this block entirely when `stats` isn't there).
 function buildStatsHtml(car) {
@@ -1068,7 +1099,14 @@ function buildStatsHtml(car) {
     html += statRow("TOP SPEED", buildPipBar(filled), stats.topSpeed);
   }
 
-  html += statBarRow("BOOST POWER", stats.boostPower, "boostPower");
+  if (stats.boostPower != null) {
+    const boostPowerPips = getBoostPowerPips(car);
+    const boostPowerBar =
+      boostPowerPips != null
+        ? buildPipBar(boostPowerPips)
+        : buildStatBar(stats.boostPower, STAT_SCALE_RANGE.boostPower);
+    html += statRow("BOOST POWER", boostPowerBar, stats.boostPower);
+  }
 
   const gainPips = CLASS_BOOST_GAIN_PIPS[car.category];
   if (gainPips != null) {
